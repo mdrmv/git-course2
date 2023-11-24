@@ -3,7 +3,7 @@ name: Build and Deploy Client MS Internal
 on:
   push:
     branches:
-      - 'internal'
+      - 'master'
     paths:
       - 'client-ms/**'
       - 'common/**'
