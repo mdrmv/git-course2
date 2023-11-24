@@ -1,0 +1,124 @@
+name: template_build
+
+on:
+  workflow_call:
+    inputs:
+      DOCKER_REGISTRY:
+        required: true
+        type: string
+      DOCKER_IMAGE_PATH:
+        required: true
+        type: string
+      DOCKER_IMAGE_TAG:
+        required: true
+        type: string
+      PATH:
+        required: true
+        type: string
+
+jobs:
+  build-app:
+    runs-on: ubuntu-latest
+    container: node:18.14.1
+
+    strategy:
+      matrix:
+        node-version: ['18.14.1']
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Cache Yarn dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/yarn
+            ./node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Install dependencies
+        run: yarn
+
+      - name: Build all microservices
+        run: yarn build-all
+      
+      - name: Build schemas
+        run: yarn schema-all
+
+      - name: Build gateway
+        run: yarn gateway build
+
+      - name: Upload gateway/.mesh artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: gateway-mesh
+          path: ${{ inputs.PATH }}/.mesh
+
+  
+      - name: Upload common/dist artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: common-dist
+          path: common/dist
+
+  build-docker:
+    runs-on: ubuntu-latest
+
+    needs: build-app
+    if: always() && needs.build-app.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+     
+      - name: 'Login to GitHub Container Registry'
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ inputs.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Download gateway-mesh artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: gateway-mesh
+          path: ${{ inputs.PATH }}/.mesh
+        
+      - name: Download common-dist artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: common-dist
+          path: common/dist
+
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./${{ inputs.PATH }}/docker/Dockerfile
+          load: true
+          tags: ${{ inputs.DOCKER_REGISTRY }}/${{ inputs.DOCKER_IMAGE_PATH }}:${{ inputs.DOCKER_IMAGE_TAG }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
+      
+      - name: Push docker image
+        continue-on-error: true
+        run: |
+          docker push ${{ inputs.DOCKER_REGISTRY }}/${{ inputs.DOCKER_IMAGE_PATH }}:${{ inputs.DOCKER_IMAGE_TAG }}

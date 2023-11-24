@@ -1,0 +1,66 @@
+name: template_deploy
+
+on:
+  workflow_call:
+    inputs:
+      DOCKER_REGISTRY:
+        required: true
+        type: string
+      DOCKER_IMAGE_PATH:
+        required: true
+        type: string
+      DOCKER_IMAGE_TAG:
+        required: true
+        type: string
+      PATH:
+        required: true
+        type: string
+      SERVER_PORT:
+        required: true
+        type: string
+      
+    secrets:
+      VPS_HOST:
+        required: true
+      VPS_USERNAME:
+        required: true
+      VPS_PASSWORD:
+        required: true
+      SECRET_PASSWORD:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull and run docker image
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          script: |
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ inputs.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
+            docker pull ${{ inputs.DOCKER_REGISTRY }}/${{ inputs.DOCKER_IMAGE_PATH }}:${{ inputs.DOCKER_IMAGE_TAG }}
+            docker stop ${{ inputs.PATH }} || true
+            docker rm ${{ inputs.PATH }} || true
+            docker run -d --restart=unless-stopped --name ${{ inputs.PATH }} --network ngdem -p ${{ inputs.SERVER_PORT }}:8000 -e SECRET_PASSWORD='${{ secrets.SECRET_PASSWORD }}' ${{ inputs.DOCKER_REGISTRY }}/${{ inputs.DOCKER_IMAGE_PATH }}:${{ inputs.DOCKER_IMAGE_TAG }}
+            docker images -q ${{ inputs.DOCKER_REGISTRY }}/${{ inputs.DOCKER_IMAGE_PATH }} | xargs docker rmi || true
+
+  healthcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Healthcheck
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST_INTERNAL }}
+          username: ${{ secrets.VPS_USERNAME_INTERNAL }}
+          password: ${{ secrets.VPS_PASSWORD_INTERNAL }}
+          script: |
+            script_output=$(bash /root/healthchecks/healthcheck-script.sh $SERVER_PORT)
+            echo "$script_output"
+            if [ $? -eq 0 ]; then
+              echo "::set-output name=status::success"
+            else
+              echo "::set-output name=status::failure"
+            fi
