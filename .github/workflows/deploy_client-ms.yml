@@ -1,9 +1,9 @@
-name: Build and Deploy Client MS Internal
+name: Build and Deploy Client MS Stage
 
 on:
   push:
     branches:
-      - 'master'
+      - 'stage'
     paths:
       - 'client-ms/**'
       - 'common/**'
@@ -12,34 +12,20 @@ on:
       - '.github/workflows/deploy_client-ms.yml'
 
 jobs:
-  tests:
-    name: tests
-    uses: ./.github/workflows/template_tests.yml
-
-  build:
-    permissions: write-all
-    needs: [tests]
-    uses: ./.github/workflows/template_build.yml
-    if: always() && needs.tests.result == 'success'
-    with:
-      DOCKER_REGISTRY: ghcr.io
-      DOCKER_IMAGE_PATH: ${{ github.repository }}/client-ms
-      DOCKER_IMAGE_TAG: ${{ github.sha }}
-      PATH: client-ms
-      SECRETS_ENVIRONMENT: internal
-
-  deploy:
-    needs: [build]
-    uses: ./.github/workflows/template_deploy.yml
-    if: always() && needs.build.result == 'success'
-    with:
-      DOCKER_REGISTRY: ghcr.io
-      DOCKER_IMAGE_PATH: ${{ github.repository }}/client-ms
-      DOCKER_IMAGE_TAG: ${{ github.sha }}
-      PATH: client-ms
-      SERVER_PORT: 8001
-    secrets:
-      VPS_HOST: ${{ secrets.VPS_HOST_INTERNAL }}
-      VPS_USERNAME: ${{ secrets.VPS_USERNAME_INTERNAL }}
-      VPS_PASSWORD: ${{ secrets.VPS_PASSWORD_INTERNAL }}
-      SECRET_PASSWORD: ${{ secrets.SECRET_PASSWORD }}
+  healthcheck:
+    needs: []
+    uses: appleboy/ssh-action@master 
+    env: 
+      SERVER_PORT: 8001 
+    with: 
+      VPS_HOST: ${{ secrets.VPS_HOST_INTERNAL }} 
+      VPS_USERNAME: ${{ secrets.VPS_USERNAME_INTERNAL }} 
+      VPS_PASSWORD: ${{ secrets.VPS_PASSWORD_INTERNAL }} 
+      SCRIPT: |
+        script_output=$(bash /root/healthchecks/healthcheck-script.sh $SERVER_PORT) 
+        echo "$script_output" 
+        if [ $? -eq 0 ]; then 
+          echo "::set-output name=status::success" 
+        else 
+          echo "::set-output name=status::failure" 
+        fi
