@@ -1,0 +1,24 @@
+name: healthcheck
+
+on:
+  workflow_run:
+    workflows: ["Build and Deploy Client MS Internal"]
+    types:
+      - completed
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Healthcheck
+        uses: appleboy/ssh-action@master
+
+      - name: Run Healthcheck
+        run: |
+          script_output=$(bash /root/healthchecks/healthcheck-script.sh $SERVER_PORT)
+          echo "$script_output"
+          if [ $? -eq 0 ]; then
+            echo "::set-output name=status::success"
+          else
+            echo "::set-output name=status::failure"
+          fi
