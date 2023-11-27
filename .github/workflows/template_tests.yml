@@ -1,0 +1,47 @@
+name: template_tests
+
+on:
+  workflow_call:
+    inputs: {}
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    container: node:18.14
+
+    services:
+      postgres:
+        image: postgres:11
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+      redis:
+        image: redis:latest
+        ports: ['6379:6379']
+
+    strategy:
+      matrix:
+        node-version: ['18.14.1']
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'yarn'
+          cache-dependency-path: '**/yarn.lock'
+      - name: Install dependencies
+        run: yarn
+      - name: Check eslint
+        run: yarn lint
+      - name: Build common
+        run: yarn common build
+      - name: Check types
+        run: yarn type-check
+      - name: Run unit tests
+        run: yarn test-all:coverage
