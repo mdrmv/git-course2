@@ -57,7 +57,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME_INTERNAL }}
           password: ${{ secrets.VPS_PASSWORD_INTERNAL }}
           script: |
-            script_output=$(bash /scripts/healthcheck-script.sh $SERVER_PORT)
+            script_output=$(bash ./scripts/healthcheck-script.sh $SERVER_PORT)
             echo "$script_output"
             if [ $? -eq 0 ]; then
               echo "::set-output name=status::success"
