@@ -1,9 +1,9 @@
-name: Build and Deploy Client MS Stage
+name: Build and Deploy Client MS master
 
 on:
   push:
     branches:
-      - 'stage'
+      - 'master'
     paths:
       - 'client-ms/**'
       - 'common/**'
